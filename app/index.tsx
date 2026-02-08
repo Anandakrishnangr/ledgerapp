@@ -13,6 +13,7 @@ export default function WebViewScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [errorTitle, setErrorTitle] = useState('Unable to Load Page');
 
   const handleNavigationStateChange = (navState: any) => {
     canGoBack.value = navState.canGoBack;
@@ -32,16 +33,64 @@ export default function WebViewScreen() {
     setIsLoading(false);
   };
 
+  const getErrorMessage = (error: string): { title: string; message: string } => {
+    const errorLower = error.toLowerCase();
+    
+    if (errorLower.includes('net::err_name_not_resolved') || errorLower.includes('name not resolved')) {
+      return {
+        title: 'Connection Error',
+        message: 'Unable to reach the server. Please check your internet connection and try again.',
+      };
+    }
+    
+    if (errorLower.includes('net::err_internet_disconnected') || errorLower.includes('internet')) {
+      return {
+        title: 'No Internet Connection',
+        message: 'Please check your internet connection and try again.',
+      };
+    }
+    
+    if (errorLower.includes('timeout') || errorLower.includes('timed out')) {
+      return {
+        title: 'Connection Timeout',
+        message: 'The request took too long. Please check your connection and try again.',
+      };
+    }
+    
+    if (errorLower.includes('ssl') || errorLower.includes('certificate')) {
+      return {
+        title: 'Security Error',
+        message: 'There was a problem with the secure connection. Please try again.',
+      };
+    }
+    
+    if (errorLower.includes('domain') || errorLower.includes('undefined')) {
+      return {
+        title: 'Unable to Load Page',
+        message: 'The page could not be loaded. Please check your connection and try again.',
+      };
+    }
+    
+    // Default error
+    return {
+      title: 'Unable to Load Page',
+      message: 'Something went wrong while loading the page. Please check your internet connection and try again.',
+    };
+  };
+
   const handleError = (syntheticEvent: any) => {
     const { nativeEvent } = syntheticEvent;
     setIsLoading(false);
     setHasError(true);
-    setErrorMessage(nativeEvent.description || 'Failed to load page. Please check your internet connection.');
+    const errorInfo = getErrorMessage(nativeEvent.description || nativeEvent.message || '');
+    setErrorMessage(errorInfo.message);
+    setErrorTitle(errorInfo.title);
   };
 
   const handleRetry = () => {
     setHasError(false);
     setErrorMessage('');
+    setErrorTitle('Unable to Load Page');
     setIsLoading(true);
     if (webViewRef.current) {
       webViewRef.current.reload();
@@ -76,6 +125,14 @@ export default function WebViewScreen() {
             onLoadStart={handleLoadStart}
             onLoadEnd={handleLoadEnd}
             onError={handleError}
+            onHttpError={(syntheticEvent) => {
+              const { nativeEvent } = syntheticEvent;
+              setIsLoading(false);
+              setHasError(true);
+              const errorInfo = getErrorMessage(`HTTP ${nativeEvent.statusCode}: ${nativeEvent.description || ''}`);
+              setErrorMessage(errorInfo.message);
+              setErrorTitle(errorInfo.title);
+            }}
             startInLoadingState={true}
             javaScriptEnabled={true}
             domStorageEnabled={true}
@@ -104,15 +161,19 @@ export default function WebViewScreen() {
           )}
           {hasError && (
             <View style={styles.errorContainer}>
-              <Image
-                source={require('@/assets/images/splash-icon.png')}
-                style={styles.splashIcon}
-                contentFit="contain"
-              />
-              <Text style={styles.errorText}>Unable to load page</Text>
+              <View style={styles.errorIconContainer}>
+                <View style={styles.errorIconCircle}>
+                  <Text style={styles.errorIconText}>⚠</Text>
+                </View>
+              </View>
+              <Text style={styles.errorTitle}>{errorTitle}</Text>
               <Text style={styles.errorDescription}>{errorMessage}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-                <Text style={styles.retryButtonText}>Retry</Text>
+              <TouchableOpacity 
+                style={styles.reloadButton} 
+                onPress={handleRetry}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.reloadButtonText}>Reload Page</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -158,33 +219,60 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 32,
   },
-  errorText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000000',
-    marginTop: 20,
-    marginBottom: 10,
+  errorIconContainer: {
+    marginBottom: 24,
+  },
+  errorIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#FFF3E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFB74D',
+  },
+  errorIconText: {
+    fontSize: 40,
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#212121',
+    marginBottom: 12,
     textAlign: 'center',
   },
   errorDescription: {
-    fontSize: 14,
-    color: '#666666',
+    fontSize: 15,
+    color: '#757575',
     textAlign: 'center',
-    marginBottom: 30,
-    paddingHorizontal: 20,
+    marginBottom: 32,
+    paddingHorizontal: 16,
+    lineHeight: 22,
   },
-  retryButton: {
+  reloadButton: {
     backgroundColor: '#000000',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
+    paddingHorizontal: 40,
+    paddingVertical: 14,
     borderRadius: 8,
+    minWidth: 160,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  retryButtonText: {
+  reloadButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 0.5,
   },
 });
 

@@ -4,7 +4,7 @@
     "slug": "ledgerx365",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/splash-icon.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "ledgerx365",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -14,8 +14,9 @@
     },
     "android": {
       "package": "com.ledgerx365.app",
+      "targetSdkVersion": 35,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/splash-icon.png",
+        "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#000000"
       },
       "permissions": [
@@ -28,7 +29,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/splash-icon.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
@@ -48,6 +49,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "124a8898-23d5-47bf-8fe9-014d62646b7e"
+      }
     }
   }
 }
