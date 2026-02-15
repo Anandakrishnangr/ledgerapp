@@ -1,5 +1,19 @@
 # Build APK
 
+## Get a test APK (quickest)
+
+To get an APK for testing without setting up NDK locally, use EAS Build:
+
+```bash
+npm install -g eas-cli
+eas login
+eas build --platform android --profile preview
+```
+
+When the build finishes, open the link shown in the terminal (or go to [expo.dev](https://expo.dev) → your project → Builds) and download the APK.
+
+---
+
 ## Build using Expo Cloud (EAS Build) - Recommended
 
 1. Install EAS CLI (if not already installed):
@@ -26,9 +40,11 @@ The APK will be available for download from the Expo dashboard after the build c
 
 ## Local Build (Alternative)
 
+**Requirement:** Android NDK must be installed (e.g. via Android Studio: SDK Manager → SDK Tools → NDK, or `sdkmanager "ndk;27.0.12077973"`). Without NDK, use EAS Build above.
+
 ```bash
-npx expo prebuild --clean
-npx expo run:android --variant release
+npx expo prebuild --platform android --clean
+cd android && ./gradlew assembleRelease
 ```
 
 The APK will be located at:

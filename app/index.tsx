@@ -1,22 +1,50 @@
-import React, { useRef, useState } from 'react';
-import { StyleSheet, View, Platform, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
+import React, { useRef, useState, useEffect } from 'react';
+import { StyleSheet, View, Platform, ActivityIndicator, Text, TouchableOpacity, BackHandler } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
-import { useSharedValue, runOnJS } from 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
 const WEBVIEW_URL = 'https://app.ledgerx.biz/';
+const WEBVIEW_ORIGIN = 'https://app.ledgerx.biz';
+const BACK_EXIT_DELAY_MS = 2000;
+
+function isAllowedUrl(url: string): boolean {
+  return url.startsWith(WEBVIEW_ORIGIN);
+}
 
 export default function WebViewScreen() {
   const webViewRef = useRef<WebView>(null);
-  const canGoBack = useSharedValue(false);
+  const lastBackPressTime = useRef(0);
+  const [canGoBack, setCanGoBack] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [errorTitle, setErrorTitle] = useState('Unable to Load Page');
+  const insets = useSafeAreaInsets();
+
+  // Android hardware back: like Chrome — WebView history, then SPA history, then double-tap to exit
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (canGoBack && webViewRef.current) {
+        webViewRef.current.goBack();
+        return true;
+      }
+      const now = Date.now();
+      if (now - lastBackPressTime.current < BACK_EXIT_DELAY_MS) {
+        BackHandler.exitApp();
+        return true;
+      }
+      lastBackPressTime.current = now;
+      webViewRef.current?.injectJavaScript('window.history.back();');
+      return true;
+    });
+    return () => sub.remove();
+  }, [canGoBack]);
 
   const handleNavigationStateChange = (navState: any) => {
-    canGoBack.value = navState.canGoBack;
+    setCanGoBack(navState.canGoBack);
     if (!navState.loading) {
       setIsLoading(false);
       setHasError(false);
@@ -97,54 +125,50 @@ export default function WebViewScreen() {
     }
   };
 
-  const goBack = () => {
-    if (webViewRef.current && canGoBack.value) {
-      webViewRef.current.goBack();
+  // Open "new window" links (target="_blank") in the same WebView instead of system browser
+  const handleOpenWindow = (event: { nativeEvent: { targetUrl: string } }) => {
+    const { targetUrl } = event.nativeEvent;
+    if (isAllowedUrl(targetUrl) && webViewRef.current) {
+      webViewRef.current.injectJavaScript(
+        `window.location.href = ${JSON.stringify(targetUrl)};`
+      );
     }
   };
 
-  // Swipe back gesture (right to left)
-  const swipeGesture = Gesture.Pan()
-    .activeOffsetX([-10, 10])
-    .onEnd((event) => {
-      // If swiping from right edge to left (back gesture)
-      if (event.translationX < -50 && Math.abs(event.translationY) < 100) {
-        runOnJS(goBack)();
-      }
-    });
-
   return (
-    <GestureHandlerRootView style={styles.container}>
-      <GestureDetector gesture={swipeGesture}>
-        <View style={styles.container}>
-          <WebView
-            ref={webViewRef}
-            source={{ uri: WEBVIEW_URL }}
-            style={styles.webview}
-            onNavigationStateChange={handleNavigationStateChange}
-            onLoadStart={handleLoadStart}
-            onLoadEnd={handleLoadEnd}
-            onError={handleError}
-            onHttpError={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent;
-              setIsLoading(false);
-              setHasError(true);
-              const errorInfo = getErrorMessage(`HTTP ${nativeEvent.statusCode}: ${nativeEvent.description || ''}`);
-              setErrorMessage(errorInfo.message);
-              setErrorTitle(errorInfo.title);
-            }}
-            startInLoadingState={true}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            allowsBackForwardNavigationGestures={Platform.OS === 'ios'}
-            mixedContentMode="never"
-            allowsInlineMediaPlayback={true}
-            mediaPlaybackRequiresUserAction={false}
-            // Android back button support
-            onShouldStartLoadWithRequest={(request) => {
-              return request.url.startsWith('https://app.ledgerx.biz');
-            }}
-          />
+    <GestureHandlerRootView style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <View style={styles.containerInner}>
+        <WebView
+          ref={webViewRef}
+          source={{ uri: WEBVIEW_URL }}
+          style={styles.webview}
+          onNavigationStateChange={handleNavigationStateChange}
+          onLoadStart={handleLoadStart}
+          onLoadEnd={handleLoadEnd}
+          onError={handleError}
+          onHttpError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            setIsLoading(false);
+            setHasError(true);
+            const errorInfo = getErrorMessage(`HTTP ${nativeEvent.statusCode}: ${nativeEvent.description || ''}`);
+            setErrorMessage(errorInfo.message);
+            setErrorTitle(errorInfo.title);
+          }}
+          startInLoadingState={true}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          allowsBackForwardNavigationGestures={Platform.OS === 'ios'}
+          mixedContentMode="never"
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
+          onShouldStartLoadWithRequest={(request) => {
+            return isAllowedUrl(request.url);
+          }}
+          onOpenWindow={handleOpenWindow}
+          setSupportMultipleWindows={false}
+          nestedScrollEnabled={Platform.OS === 'android'}
+          {...(Platform.OS === 'android' && { androidLayerType: 'hardware' as const })}
+        />
           {isLoading && !hasError && (
             <View style={styles.splashContainer}>
               <Image
@@ -177,8 +201,7 @@ export default function WebViewScreen() {
               </TouchableOpacity>
             </View>
           )}
-        </View>
-      </GestureDetector>
+      </View>
     </GestureHandlerRootView>
   );
 }
@@ -187,6 +210,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  containerInner: {
+    flex: 1,
   },
   webview: {
     flex: 1,
